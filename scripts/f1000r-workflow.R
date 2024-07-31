@@ -1,3 +1,14 @@
+## Install Packages
+BiocManager::install(c("mariner",
+                       "marinerData",
+                       "InteractionSet",
+                       "data.table",
+                       "plyranges",
+                       "apeglm",
+                       "DESeq2",
+                       "plotgardener",
+                       "RColorBrewer"))
+
 ## Load packages
 library(mariner)
 library(marinerData)
@@ -7,7 +18,6 @@ library(plyranges)
 library(DESeq2)
 library(plotgardener)
 library(RColorBrewer)
-
 
 ## Access WT Hi-C data from GEO
 wt_hicFiles <-
@@ -33,7 +43,7 @@ for (i in seq_along(fs_hicFiles)){
   system(paste0("wget -c ", fs_hicFiles[i], " -P data/"))
 }
 
-## Create a variable for .hic file filepaths
+## Create a variable for .hic file file paths
 hicFiles <- list.files("data",
                        pattern = "GSM4259*",
                        full.names = T)
@@ -51,7 +61,7 @@ for (i in seq_along(megaMap_hicFiles)){
   system(paste0("wget -c ", megaMap_hicFiles[i], " -P data/"))
 }
 
-## Create a variable for megaMap .hic file filepaths
+## Create a variable for megaMap .hic file file paths
 megaMap_files <- list.files("data",
                             pattern = "*megaMap*",
                             full.names = T)
@@ -60,18 +70,13 @@ megaMap_files <- list.files("data",
 names(megaMap_files) <- c("megaMap_FS",
                           "megaMap_WT")
 
-## Read in WT & FS loop files from marinerData package
-wtLoops <- read.table(WT_5kbLoops.txt(),
-                      header = T)
-
-fsLoops <- read.table(FS_5kbLoops.txt(),
-                      header = T)
-
 ## Convert loops into GInteractions objects & expand to 10kb resolution
+wtLoops <- fread(marinerData::WT_5kbLoops.txt())
 wtLoopsGI <- wtLoops |> 
   as_ginteractions() |> 
   snapToBins(10e3)
 
+fsLoops <- fread(marinerData::FS_5kbLoops.txt())
 fsLoopsGI <- fsLoops |> 
   as_ginteractions() |> 
   snapToBins(10e3)
@@ -86,7 +91,7 @@ seqlevelsStyle(fsLoopsGI) <- "ENSEMBL"
 
 ## Create list of loops
 loopList <- list("WT" = wtLoopsGI, "FS" = fsLoopsGI)
-summary(loopList)
+loopList
 
 ## Remove redundant loops (i.e. loops that are present in both WT & FS)
 mergedLoops <-
@@ -101,17 +106,13 @@ summary(loopList)
 ## View number of loops after merging
 summary(mergedLoops)
 
-## View information about the pixels before merging
-sets(mergedLoops)
-
 ## Extract pixels
 pixels <- pullHicPixels(
   x = mergedLoops,
   files = hicFiles,
-  binSize = 10e3 ## loops were originally called at 5kb resolution
-)
+  binSize = 10e3)
 
-## Show attributes of pixels
+## Show attributes of `pixels`
 pixels
 
 ## Show count matrix housed within `pixels`
@@ -133,31 +134,37 @@ dds <- DESeqDataSetFromMatrix(
   colData = colData,
   design = ~ replicate + condition)
 
+## Filter out loops with low counts (at least 10 counts in at least 4 samples)
+keep <- rowSums(counts(dds) >= 10) >= 4
+dds <- dds[keep,]
+
 ## Perform differential expression analysis based on the Negative Binomial (a.k.a. Gamma-Poisson) distribution
 dds <- DESeq(dds)
 dds
 
 ## Get shrunken results
 res <- lfcShrink(dds,
-                 coef="condition_WT_vs_FS",
-                 type= "apeglm")
+                 coef = "condition_WT_vs_FS",
+                 type = "apeglm")
 
 summary(res, alpha = 0.05)
-
-## Inspect the results with a PCA plot
-plotMA(res, alpha = 0.05)
 
 ## Inspect the results with a PCA plot
 varianceStabilizingTransformation(dds) |>
   plotPCA(intgroup="condition") +
   ggplot2::theme(aspect.ratio = 1)
 
+## Inspect the results with an MA plot
+plotMA(res,
+       alpha = 0.05,
+       ylim = c(-4,4))
+
 ## We can then add these results from DESeq2 to our InteractionMatrix object
 rowData(pixels) <- res
 
 ## Separate WT/FS-specific loops 
-fsLoops <- pixels[which(res$padj <= 0.05 & res$log2FoldChange > 0)]
-wtLoops <- pixels[which(res$padj <= 0.05 & res$log2FoldChange < 0)]
+fsLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange > 0]
+wtLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange < 0]
 
 ## Initiate plotgardener page
 pageCreate(width = 4, height = 3,
@@ -204,25 +211,14 @@ annoHeatmapLegend(plot = fs_hic,
                   height = 0.75,
                   fontcolor = 'black')
 
-## Annotate WT loops
+## Annotate loops
 annoPixels(plot = wt_hic,
-           data = interactions(wtLoops),
-           type = "arrow",
-           col = '#005AB5')
-
-annoPixels(plot = wt_hic,
-           data = interactions(fsLoops),
+           data = fsLoopsGI,
            type = "arrow",
            col = '#DC3220')
 
-## Annotate FS loops
 annoPixels(plot = fs_hic,
-           data = interactions(wtLoops),
-           type = "arrow",
-           col = '#005AB5')
-
-annoPixels(plot = fs_hic,
-           data = interactions(fsLoops),
+           data = fsLoopsGI,
            type = "arrow",
            col = '#DC3220')
 
@@ -246,8 +242,113 @@ plotGenes(width = 3.5,
           y = 2.325)
 
 plotGenomeLabel(params = p,
+                chrom = paste0("chr", p$chrom),
                 x = 0.25,
-                y = 2.825,
-                scale = "Mb")
+                y = 2.825)
 
+## Concatenate WT & FS loop GRanges
+fsLoops_50 <- head(fsLoops[order(rowData(fsLoops)$padj, decreasing = F)], 50)
+
+## top 50 FS loops
+fsLoops_gr <-
+  GRanges(seqnames = as.character(seqnames(anchors(x = fsLoops, "first"))),
+          ranges = IRanges(start = start(anchors(fsLoops, "first")),
+                           end = end(anchors(fsLoops, "second"))),
+          mcols = mcols(fsLoops))
+
+## Add buffer 
+buffer <- 200e3
+fsLoops_gr_buffer <- fsLoops_gr + buffer
+
+## Make pdf
+pdf(file = "plots/Flores_F1000R.pdf",
+    width = 5.75,
+    height = 6)
+
+## Loop through each region
+for(i in seq_along(fsLoops_gr_buffer)){ 
+  
+  ## Initiate plotgardener page
+  pageCreate(width = 5.75, height = 6,
+             showGuides = F)
+  
+  ## Define shared parameters
+  p <- pgParams(assembly = "hg38",
+                resolution = 10e3,
+                chrom = as.character(seqnames(fsLoops_gr_buffer))[i],
+                chromstart = start(fsLoops_gr_buffer)[i],
+                chromend = end(fsLoops_gr_buffer)[i],
+                zrange = c(0,150),
+                norm = "SCALE",
+                x = 0.25,
+                width = 5,
+                length = 5,
+                height = 2)
+  
+  ## Plot WT Hi-C Mega Map
+  wt_hic <- plotHicRectangle(data = megaMap_files[["megaMap_WT"]],                             
+                             params = p,
+                             x = 0.25,
+                             y = 0.25)
+  
+  ## Plot FS Hi-C Map
+  fs_hic <- plotHicRectangle(data = megaMap_files[["megaMap_FS"]],                             
+                             params = p,
+                             x = 0.25,
+                             y = 2.3)
+  
+  ## Add legend for WT Hi-C map
+  annoHeatmapLegend(plot = wt_hic,
+                    x = 5.35,
+                    y = 0.25,
+                    width = 0.1,
+                    height = 1.5,
+                    fontcolor = 'black')
+  
+  ## Add legend for FS Hi-C map
+  annoHeatmapLegend(plot = fs_hic,
+                    x = 5.35,
+                    y = 2.5,
+                    width = 0.1,
+                    height = 1.5,
+                    fontcolor = 'black')
+  
+  ## Annotate FS loops
+  annoPixels(plot = wt_hic,
+             data = interactions(fsLoops_50),
+             type = "arrow",
+             col = '#DC3220')
+  
+  annoPixels(plot = fs_hic,
+             data = interactions(fsLoops_50),
+             type = "arrow",
+             col = '#DC3220')
+  
+  ## Add text labels
+  plotText(label = "WT",
+           x = 0.25,
+           y = 0.25,
+           just = c('top', 'left'))
+  
+  plotText(label = "FS",
+           x = 0.25,
+           y = 2.35,
+           just = c('top', 'left'))
+  
+  ## Add Genes + Gene labels
+  plotGenes(width = 5,
+            chrom = paste0("chr", p$chrom),
+            params = p,
+            x = 0.25,
+            y = 4.25,
+            height = 1)
+  
+  plotGenomeLabel(params = p,
+                  chrom = paste0("chr", p$chrom),
+                  x = 0.25,
+                  y = 5.25)
+}
+dev.off()
+
+## Get session information
 sessionInfo()
