@@ -118,6 +118,10 @@ pixels
 ## Show count matrix housed within `pixels`
 counts(pixels)
 
+## Filter out loops with low counts (at least 10 counts in at least 4 samples)
+keep <- rowSums(counts(pixels) >= 10) >= 4
+pixels <- pixels[keep,]
+
 ## Construct colData
 colData <- data.frame(condition = factor(rep(c("WT", "FS"), each = 4)),
                       replicate = factor(rep(1:4, 2)))
@@ -133,10 +137,6 @@ dds <- DESeqDataSetFromMatrix(
   countData = counts(pixels),
   colData = colData,
   design = ~ replicate + condition)
-
-## Filter out loops with low counts (at least 10 counts in at least 4 samples)
-keep <- rowSums(counts(dds) >= 10) >= 4
-dds <- dds[keep,]
 
 ## Perform differential expression analysis based on the Negative Binomial (a.k.a. Gamma-Poisson) distribution
 dds <- DESeq(dds)
@@ -159,11 +159,12 @@ plotMA(res,
        alpha = 0.05,
        ylim = c(-4,4))
 
-## We can then add these results from DESeq2 to our InteractionMatrix object
+## Add results to rowData of our `pixels` InteractionMatrix
 rowData(pixels) <- res
 
 ## Separate WT/FS-specific loops 
 fsLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange > 0]
+
 wtLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange < 0]
 
 ## Initiate plotgardener page
@@ -183,11 +184,13 @@ p <- pgParams(assembly = "hg19",
               length = 3.5,
               height = 1)
 
+
 ## Plot WT Hi-C Mega Map
 wt_hic <- plotHicRectangle(data = megaMap_files[["megaMap_WT"]],                             
                            params = p,
                            x = 0.25,
                            y = 0.25)
+
 
 ## Plot FS Hi-C Map
 fs_hic <- plotHicRectangle(data = megaMap_files[["megaMap_FS"]],                             
@@ -213,14 +216,15 @@ annoHeatmapLegend(plot = fs_hic,
 
 ## Annotate loops
 annoPixels(plot = wt_hic,
-           data = fsLoopsGI,
+           data = interactions(fsLoops),
            type = "arrow",
-           col = '#DC3220')
+           col = 'blue')
 
 annoPixels(plot = fs_hic,
-           data = fsLoopsGI,
+           data = interactions(fsLoops),
            type = "arrow",
-           col = '#DC3220')
+           col = 'blue')
+
 
 ## Add text labels
 plotText(label = "WT",
@@ -246,10 +250,13 @@ plotGenomeLabel(params = p,
                 x = 0.25,
                 y = 2.825)
 
-## Concatenate WT & FS loop GRanges
+
+# Create Survey Plot ------------------------------------------------------
+
+## Take Top 50 FS loops
 fsLoops_50 <- head(fsLoops[order(rowData(fsLoops)$padj, decreasing = F)], 50)
 
-## top 50 FS loops
+## Convert to GRanges Object
 fsLoops_gr <-
   GRanges(seqnames = as.character(seqnames(anchors(x = fsLoops, "first"))),
           ranges = IRanges(start = start(anchors(fsLoops, "first")),
@@ -273,7 +280,7 @@ for(i in seq_along(fsLoops_gr_buffer)){
              showGuides = F)
   
   ## Define shared parameters
-  p <- pgParams(assembly = "hg38",
+  p <- pgParams(assembly = "hg19",
                 resolution = 10e3,
                 chrom = as.character(seqnames(fsLoops_gr_buffer))[i],
                 chromstart = start(fsLoops_gr_buffer)[i],
