@@ -1,3 +1,14 @@
+## Install Packages
+BiocManager::install(c("mariner",
+                       "marinerData",
+                       "InteractionSet",
+                       "data.table",
+                       "plyranges",
+                       "apeglm",
+                       "DESeq2",
+                       "plotgardener",
+                       "RColorBrewer"))
+
 ## Load packages
 library(mariner)
 library(marinerData)
@@ -108,7 +119,6 @@ pixels
 counts(pixels)
 
 ## Filter out loops with low counts (at least 10 counts in at least 4 samples)
-
 keep <- rowSums(counts(pixels) >= 10) >= 4
 pixels <- pixels[keep,]
 
@@ -122,7 +132,6 @@ rownames(colData) <- colnames(counts(pixels))
 ## Ensure the colnames of the count matrix is equal to the rownames of the colData
 all(colnames(counts(pixels)) == rownames(colData))
 
-
 ## Build a DESeq Dataset
 dds <- DESeqDataSetFromMatrix(
   countData = counts(pixels),
@@ -132,7 +141,6 @@ dds <- DESeqDataSetFromMatrix(
 ## Perform differential expression analysis based on the Negative Binomial (a.k.a. Gamma-Poisson) distribution
 dds <- DESeq(dds)
 dds
-
 
 ## Get shrunken results
 res <- lfcShrink(dds,
@@ -156,7 +164,6 @@ rowData(pixels) <- res
 
 ## Separate WT/FS-specific loops 
 diff_fsLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange > 0]
-
 diff_wtLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange < 0]
 
 ## Initiate plotgardener page
