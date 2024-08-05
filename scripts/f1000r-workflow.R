@@ -74,12 +74,16 @@ names(megaMap_files) <- c("megaMap_FS",
 wtLoops <- fread(marinerData::WT_5kbLoops.txt())
 wtLoopsGI <- wtLoops |> 
   as_ginteractions() |> 
-  snapToBins(10e3)
+  assignToBins(binSize = 10e3,
+               pos1 = "center",
+               pos2 = "center")
 
 fsLoops <- fread(marinerData::FS_5kbLoops.txt())
 fsLoopsGI <- fsLoops |> 
   as_ginteractions() |> 
-  snapToBins(10e3)
+  assignToBins(binSize = 10e3,
+               pos1 = "center",
+               pos2 = "center")
 
 ## Show summaries of GInteractions
 summary(wtLoopsGI)
@@ -100,6 +104,7 @@ mergedLoops <-
   mergePairs(loopList,
              radius = 10e3,
              method = "manhattan",
+             column = "APScoreAvg",
              pos = "center")
 
 ## View number of loops before merging
@@ -113,6 +118,7 @@ pixels <- pullHicPixels(
   x = mergedLoops,
   files = hicFiles,
   binSize = 10e3)
+
 pixels
 
 ## Show count matrix housed within `pixels`
@@ -120,21 +126,21 @@ counts(pixels)
 
 ## Filter out loops with low counts (at least 10 counts in at least 4 samples)
 keep <- rowSums(counts(pixels) >= 10) >= 4
-pixels <- pixels[keep,]
+pixels_filt <- pixels[keep,]
 
 ## Construct colData
 colData <- data.frame(condition = factor(rep(c("WT", "FS"), each = 4)),
                       replicate = factor(rep(1:4, 2)))
 
 ## Add rownames to colData for DESeq object
-rownames(colData) <- colnames(counts(pixels))
+rownames(colData) <- colnames(counts(pixels_filt))
 
 ## Ensure the colnames of the count matrix is equal to the rownames of the colData
-all(colnames(counts(pixels)) == rownames(colData))
+all(colnames(counts(pixels_filt)) == rownames(colData))
 
 ## Build a DESeq Dataset
 dds <- DESeqDataSetFromMatrix(
-  countData = counts(pixels),
+  countData = counts(pixels_filt),
   colData = colData,
   design = ~ replicate + condition)
 
@@ -159,12 +165,13 @@ plotMA(res,
        alpha = 0.05,
        ylim = c(-4,4))
 
-## Add results to rowData of our `pixels` InteractionMatrix
-rowData(pixels) <- res
+## Add results to rowData of our `pixels_filt` InteractionMatrix
+rowData(pixels_filt) <- res
 
-## Separate WT/FS-specific loops 
-diff_fsLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange > 0]
-diff_wtLoops <- pixels[rowData(pixels)$padj <= 0.05 & rowData(pixels)$log2FoldChange < 0]
+## Filter for statistically significant differential loops
+diffLoops <- pixels_filt[which(rowData(pixels_filt)$padj <= 0.05 &
+                                 rowData(pixels_filt)$log2FoldChange > 0 |
+                                 rowData(pixels_filt)$log2FoldChange < 0)]
 
 ## Initiate plotgardener page
 pageCreate(width = 4.1, height = 4.25,
@@ -211,13 +218,15 @@ annoHeatmapLegend(plot = fs_hic,
 
 ## Annotate loops
 annoPixels(plot = wt_hic,
-           data = interactions(diff_fsLoops),
-           type = "arrow",shift = 2,
+           data = interactions(diffLoops),
+           type = "arrow",
+           shift = 2,
            col = 'black')
 
 annoPixels(plot = fs_hic,
-           data = interactions(diff_fsLoops),
-           type = "arrow",shift = 2,
+           data = interactions(diffLoops),
+           type = "arrow",
+           shift = 2,
            col = 'black')
 
 ## Add text labels
@@ -244,7 +253,7 @@ plotGenomeLabel(params = p,
 # Create Survey Plot ------------------------------------------------------
 
 ## Take Top 50 FS loops
-fsLoops_50 <- head(diff_fsLoops[order(rowData(diff_fsLoops)$padj, decreasing = F)], 50)
+fsLoops_50 <- head(diffLoops[order(rowData(diffLoops)$padj, decreasing = F)], 50)
 
 ## Convert to GRanges Object
 fsLoops_gr <-
@@ -258,7 +267,7 @@ buffer <- 200e3
 fsLoops_gr_buffer <- fsLoops_gr + buffer
 
 ## Make pdf
-pdf(file = "plots/Flores_F1000R.pdf",
+pdf(file = "plots/surveyPlot.pdf",
     width = 4.1,
     height = 4.25)
 
@@ -339,7 +348,7 @@ for(i in seq_along(fsLoops_gr_buffer)){
   plotGenomeLabel(params = p,
                   chrom = paste0("chr", p$chrom),
                   y = 3.9)
-  }
+}
 dev.off()
 
 ## Get session information
