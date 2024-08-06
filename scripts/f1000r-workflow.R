@@ -74,19 +74,17 @@ names(megaMap_files) <- c("megaMap_FS",
 wtLoops <- fread(marinerData::WT_5kbLoops.txt())
 wtLoopsGI <- wtLoops |> 
   as_ginteractions() |> 
-  assignToBins(binSize = 10e3,
-               pos1 = "center",
-               pos2 = "center")
+  snapToBins(binSize = 10e3)
 
 fsLoops <- fread(marinerData::FS_5kbLoops.txt())
 fsLoopsGI <- fsLoops |> 
   as_ginteractions() |> 
-  assignToBins(binSize = 10e3,
-               pos1 = "center",
-               pos2 = "center")
+  snapToBins(binSize = 10e3)
 
-## Show summaries of GInteractions
+## Show summary of wtLoopsGI
 summary(wtLoopsGI)
+
+## Show summary of fsLoopsGI
 summary(fsLoopsGI)
 
 ## change seqlevelsStyle such that "chr" is removed from seqnames() columns
@@ -106,9 +104,6 @@ mergedLoops <-
              method = "manhattan",
              column = "APScoreAvg",
              pos = "center")
-
-## View number of loops before merging
-summary(loopList)
 
 ## View number of loops after merging
 summary(mergedLoops)
@@ -156,14 +151,14 @@ res <- lfcShrink(dds,
 summary(res, alpha = 0.05)
 
 ## Inspect the results with a PCA plot
-pdf(file = "plots/Fig1_PCA.pdf")
+pdf(file = "Fig1_PCA.pdf")
 varianceStabilizingTransformation(dds) |>
-  plotPCA(intgroup="condition") +
+  plotPCA(intgroup = "condition") +
   ggplot2::theme(aspect.ratio = 1)
 dev.off()
 
 ## Inspect the results with an MA plot
-pdf(file = "plots/Fig2_MA.pdf")
+pdf(file = "Fig2_MA.pdf")
 plotMA(res,
        alpha = 0.05,
        ylim = c(-4,4))
@@ -177,7 +172,7 @@ diffLoops <- pixels_filt[which(rowData(pixels_filt)$padj <= 0.05 &
                                  rowData(pixels_filt)$log2FoldChange > 0 |
                                  rowData(pixels_filt)$log2FoldChange < 0)]
 
-pdf(file = "plots/Fig3_PBX3region.pdf",
+pdf(file = "Fig3_PBX3region.pdf",
     width = 4.1,
     height = 4.25)
 ## Initiate plotgardener page
@@ -190,7 +185,7 @@ p <- pgParams(assembly = "hg19",
               chrom = "9",
               chromstart = 128420000,
               chromend   = 128750000 ,
-              zrange = c(0,300),
+              zrange = c(0, 300),
               norm = "SCALE",
               x = 0.25,
               width = 3.5,
@@ -258,6 +253,7 @@ plotGenomeLabel(params = p,
                 y = 3.9)
 
 dev.off()
+
 # Create Survey Plot ------------------------------------------------------
 
 ## Take Top 50 FS loops
@@ -275,7 +271,7 @@ buffer <- 200e3
 fsLoops_gr_buffer <- fsLoops_gr + buffer
 
 ## Make pdf
-pdf(file = "plots/surveyPlot.pdf",
+pdf(file = "surveyPlot.pdf",
     width = 4.1,
     height = 4.25)
 
