@@ -156,14 +156,18 @@ res <- lfcShrink(dds,
 summary(res, alpha = 0.05)
 
 ## Inspect the results with a PCA plot
+pdf(file = "plots/Fig1_PCA.pdf")
 varianceStabilizingTransformation(dds) |>
   plotPCA(intgroup="condition") +
   ggplot2::theme(aspect.ratio = 1)
+dev.off()
 
 ## Inspect the results with an MA plot
+pdf(file = "plots/Fig2_MA.pdf")
 plotMA(res,
        alpha = 0.05,
        ylim = c(-4,4))
+dev.off()
 
 ## Add results to rowData of our `pixels_filt` InteractionMatrix
 rowData(pixels_filt) <- res
@@ -173,6 +177,9 @@ diffLoops <- pixels_filt[which(rowData(pixels_filt)$padj <= 0.05 &
                                  rowData(pixels_filt)$log2FoldChange > 0 |
                                  rowData(pixels_filt)$log2FoldChange < 0)]
 
+pdf(file = "plots/Fig3_PBX3region.pdf",
+    width = 4.1,
+    height = 4.25)
 ## Initiate plotgardener page
 pageCreate(width = 4.1, height = 4.25,
            showGuides = F)
@@ -250,6 +257,7 @@ plotGenomeLabel(params = p,
                 chrom = paste0("chr", p$chrom),
                 y = 3.9)
 
+dev.off()
 # Create Survey Plot ------------------------------------------------------
 
 ## Take Top 50 FS loops
