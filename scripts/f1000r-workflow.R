@@ -323,12 +323,12 @@ for(i in seq_along(fsLoops_gr_buffer)){
   
   ## Annotate loops
   annoPixels(plot = wt_hic,
-             data = interactions(fsLoops_50),
+             data = interactions(diffLoops),
              type = "arrow",shift = 2,
              col = 'black')
   
   annoPixels(plot = fs_hic,
-             data = interactions(fsLoops_50),
+             data = interactions(diffLoops),
              type = "arrow",shift = 2,
              col = 'black')
   
